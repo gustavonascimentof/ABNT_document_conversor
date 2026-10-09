@@ -60,6 +60,6 @@ Acesse `http://localhost:3000`.
 
 ## Limitações conhecidas / próximos passos
 
-- Imagens, tabelas e formatação inline (negrito/itálico) do documento original ainda não são preservadas na conversão — apenas o texto.
+- Tabelas, listas (com marcadores/numeração) e legendas das imagens do documento original ainda não são preservadas na conversão. Negrito, itálico e imagens já são.
 - Normalização do *conteúdo* das referências (capitalização, itálico de títulos) ainda não é feita — hoje só o espaçamento/layout é corrigido.
 - Gerador de referências a partir de campos estruturados (planejado).
