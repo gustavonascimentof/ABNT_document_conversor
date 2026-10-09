@@ -8,8 +8,13 @@ import {
   AlignmentType,
   TableOfContents,
   PageBreak,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
 } from "docx";
-import { DocBlock, DocumentMetadata } from "./types";
+import { DocBlock, DocumentMetadata, DadosTabela } from "./types";
 import { ABNT_RULES } from "./rules";
 
 function removerAcentos(texto: string): string {
@@ -195,6 +200,76 @@ function buildImagemDoOriginal(imagem: NonNullable<DocBlock["imagem"]>): Paragra
   });
 }
 
+function ehNumerico(texto: string): boolean {
+  return /\d/.test(texto) && /^[\s\d.,%R$€+\-–()]+$/.test(texto);
+}
+
+function buildTabela(dados: DadosTabela, numero: number): (Paragraph | Table)[] {
+  const rotulo = dados.tipo === "quadro" ? "Quadro" : "Tabela";
+  const fechado = dados.tipo === "quadro";
+  const linha = { style: BorderStyle.SINGLE, size: 6, color: "000000" };
+  const nenhuma = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+
+  const rows = dados.linhas.map(
+    (celulas, rIdx) =>
+      new TableRow({
+        tableHeader: rIdx === 0,
+        cantSplit: true,
+        children: celulas.map(
+          (c) =>
+            new TableCell({
+              columnSpan: c.colSpan,
+              margins: { top: 40, bottom: 40, left: 80, right: 80 },
+              borders: !fechado && rIdx === 0 ? { bottom: linha } : undefined,
+              children: [
+                new Paragraph({
+                  alignment: rIdx === 0 || ehNumerico(c.text) ? AlignmentType.CENTER : AlignmentType.LEFT,
+                  spacing: { line: ABNT_RULES.spacing.singleLine, lineRule: "auto" },
+                  children: [
+                    new TextRun({ text: c.text, bold: rIdx === 0, size: ABNT_RULES.font.sizeSmallHalfPt }),
+                  ],
+                }),
+              ],
+            })
+        ),
+      })
+  );
+
+  const tabela = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    alignment: AlignmentType.CENTER,
+    borders: fechado
+      ? { top: linha, bottom: linha, left: linha, right: linha, insideHorizontal: linha, insideVertical: linha }
+      : { top: linha, bottom: linha, left: nenhuma, right: nenhuma, insideHorizontal: nenhuma, insideVertical: nenhuma },
+    rows,
+  });
+
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      keepNext: true,
+      spacing: { line: ABNT_RULES.spacing.singleLine, lineRule: "auto", before: 240 },
+      children: [
+        new TextRun({
+          text: `${rotulo} ${numero} – ${dados.titulo ?? "[insira o título]"}`,
+          size: ABNT_RULES.font.sizeSmallHalfPt,
+        }),
+      ],
+    }),
+    tabela,
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { line: ABNT_RULES.spacing.singleLine, lineRule: "auto", before: 60, after: 240 },
+      children: [
+        new TextRun({
+          text: `Fonte: ${dados.fonte ?? "[indique a fonte dos dados]"}`,
+          size: ABNT_RULES.font.sizeSmallHalfPt,
+        }),
+      ],
+    }),
+  ];
+}
+
 // ---------- Corpo do documento ----------
 
 function blockParaParagrafo(block: DocBlock): Paragraph {
@@ -258,14 +333,21 @@ function blockParaParagrafo(block: DocBlock): Paragraph {
 export async function generateAbntDocx(blocks: DocBlock[], meta: DocumentMetadata): Promise<Blob> {
   const blocksNumerados = numerarTitulos(blocks);
 
-  let contadorFigura = 0;
-  const corpo: Paragraph[] = [];
+    let contadorFigura = 0;
+  let contadorTabela = 0;
+  let contadorQuadro = 0;
+  const corpo: (Paragraph | Table)[] = [];
   for (const block of blocksNumerados) {
     if (block.type === "imagemExemplo") {
       contadorFigura += 1;
       corpo.push(...buildImagemExemplo(contadorFigura, block.text));
     } else if (block.type === "imagem" && block.imagem) {
       corpo.push(buildImagemDoOriginal(block.imagem));
+    } else if (block.type === "tabela" && block.tabela) {
+      if (block.tabela.tipo === "quadro") contadorQuadro += 1;
+      else contadorTabela += 1;
+      const numero = block.tabela.tipo === "quadro" ? contadorQuadro : contadorTabela;
+      corpo.push(...buildTabela(block.tabela, numero));
     } else {
       corpo.push(blockParaParagrafo(block));
     }

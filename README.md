@@ -23,11 +23,11 @@ Formatar um trabalho acadêmico segundo a ABNT — margens, fonte, espaçamento,
 ## Normas aplicadas
 
 | Norma | Escopo |
-|---|---|
-| NBR 14724:2011 | Apresentação geral (margens, fonte, espaçamento, capa, folha de rosto) |
+
+| NBR 14724:2024 | Apresentação geral (margens, fonte, espaçamento, capa, folha de rosto) |
 | NBR 6024:2012 | Numeração progressiva das seções |
 | NBR 10520:2023 | Citações |
-| NBR 6023:2018 | Referências (layout) |
+| NBR 6023 | Referências (layout) |
 
 ## Stack técnica
 
@@ -60,6 +60,6 @@ Acesse `http://localhost:3000`.
 
 ## Limitações conhecidas / próximos passos
 
-- Tabelas, listas (com marcadores/numeração) e legendas das imagens do documento original ainda não são preservadas na conversão. Negrito, itálico e imagens já são.
+- Listas (marcadores/numeração), células mescladas verticalmente em tabelas e legendas das imagens do documento original ainda não são tratadas. Texto, negrito/itálico, imagens e tabelas já são preservados.
 - Normalização do *conteúdo* das referências (capitalização, itálico de títulos) ainda não é feita — hoje só o espaçamento/layout é corrigido.
 - Gerador de referências a partir de campos estruturados (planejado).

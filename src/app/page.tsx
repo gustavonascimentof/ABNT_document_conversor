@@ -23,6 +23,20 @@ const BLOCOS_TEMPLATE_DO_ZERO: DocBlock[] = [
   { type: "heading1", text: "DESENVOLVIMENTO" },
   { type: "paragraph", text: "Escreva aqui o desenvolvimento do seu trabalho." },
   { type: "imagemExemplo", text: "Exemplo de legenda descritiva da imagem" },
+    {
+    type: "tabela",
+    text: "",
+    tabela: {
+      tipo: "tabela",
+      titulo: "Exemplo de título da tabela",
+      fonte: "elaborado pelo autor (2026).",
+      linhas: [
+        [{ text: "Categoria" }, { text: "Quantidade" }],
+        [{ text: "Item A" }, { text: "10" }],
+        [{ text: "Item B" }, { text: "20" }],
+      ],
+    },
+  },
   { type: "paragraph", text: "Continue o texto normalmente depois da imagem, explicando o que ela demonstra." },
   { type: "heading1", text: "CONCLUSÃO" },
   { type: "paragraph", text: "Escreva aqui a conclusão do seu trabalho." },

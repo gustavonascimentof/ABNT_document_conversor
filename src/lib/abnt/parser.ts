@@ -1,11 +1,13 @@
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
-import { DocBlock, BlockType, TextRunData } from "./types";
+import { DocBlock, BlockType, TextRunData, CelulaTabela, DadosTabela } from "./types";
 
 const parserOptions = {
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
-  isArray: (name: string) => ["w:p", "w:r", "w:t"].includes(name),
+  parseTagValue: false,
+  trimValues: false,
+  isArray: (name: string) => ["w:p", "w:r", "w:t", "w:tbl", "w:tr", "w:tc"].includes(name),
 };
 
 function extractStyles(stylesXml: string): Map<string, string> {
@@ -38,6 +40,23 @@ function extractRelationships(relsXml: string): Map<string, string> {
     if (id && target) map.set(id, target);
   }
   return map;
+}
+
+// Descobre a ordem original entre parágrafos ("p") e tabelas ("tbl") no corpo do documento
+function ordemDoCorpo(documentXml: string): ("p" | "tbl")[] {
+  const parser = new XMLParser({ preserveOrder: true, ignoreAttributes: false });
+  const parsed = parser.parse(documentXml) as any[];
+
+  const doc = parsed.find((n) => n["w:document"]);
+  const body = doc?.["w:document"]?.find((n: any) => n["w:body"]);
+  const filhos: any[] = body?.["w:body"] ?? [];
+
+  const ordem: ("p" | "tbl")[] = [];
+  for (const filho of filhos) {
+    if (filho["w:p"]) ordem.push("p");
+    else if (filho["w:tbl"]) ordem.push("tbl");
+  }
+  return ordem;
 }
 
 function removerAcentos(texto: string): string {
@@ -82,7 +101,7 @@ function extractParagraphRuns(paragraph: any): TextRunData[] {
     const items = Array.isArray(t) ? t : t ? [t] : [];
     let texto = "";
     for (const item of items) {
-      texto += typeof item === "string" ? item : item?.["#text"] ?? "";
+            texto += typeof item === "object" ? String(item?.["#text"] ?? "") : String(item ?? "");
     }
     if (!texto) continue;
 
@@ -142,6 +161,92 @@ async function extractImagemDoRun(
   return { data, width, height, tipo: normalizarTipoImagem(extensao) };
 }
 
+// ---------- Tabelas ----------
+
+function ehNumerico(texto: string): boolean {
+  return /\d/.test(texto) && /^[\s\d.,%R$€+\-–()]+$/.test(texto);
+}
+
+// Tabela (IBGE) = dados majoritariamente numéricos; Quadro = conteúdo textual
+function classificarTabela(linhas: CelulaTabela[][]): "tabela" | "quadro" {
+  let total = 0;
+  let numericas = 0;
+  for (const linha of linhas.slice(1)) {
+    for (const celula of linha.slice(1)) {
+      if (!celula.text) continue;
+      total += 1;
+      if (ehNumerico(celula.text)) numericas += 1;
+    }
+  }
+  return total > 0 && numericas / total >= 0.5 ? "tabela" : "quadro";
+}
+
+function extractTabela(tbl: any): DadosTabela | null {
+  const linhasXml: any[] = tbl["w:tr"] ?? [];
+  const linhas: CelulaTabela[][] = [];
+
+  for (const tr of linhasXml) {
+    const celulasXml: any[] = tr["w:tc"] ?? [];
+    const linha: CelulaTabela[] = [];
+
+    for (const tc of celulasXml) {
+      const paragrafos: any[] = tc["w:p"] ?? [];
+      const texto = paragrafos
+        .map((p) => extractParagraphRuns(p).map((r) => r.text).join(""))
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const span = Number(tc["w:tcPr"]?.["w:gridSpan"]?.["@_w:val"] ?? 1);
+      linha.push({ text: texto, colSpan: span > 1 ? span : undefined });
+    }
+    if (linha.length > 0) linhas.push(linha);
+  }
+
+  if (linhas.length === 0) return null;
+  return { linhas, tipo: classificarTabela(linhas) };
+}
+
+const REGEX_TITULO_TABELA = /^(tabela|quadro)\s*\d*\s*[–—-]\s*(.+)$/i;
+const REGEX_FONTE = /^fonte\s*:\s*(.+)$/i;
+
+// Se o usuário já escreveu "Tabela 1 – título" acima e "Fonte: ..." abaixo, reaproveita
+function associarLegendas(blocks: DocBlock[]): DocBlock[] {
+  const resultado: DocBlock[] = [];
+
+  for (let i = 0; i < blocks.length; i++) {
+    const bloco = blocks[i];
+    if (bloco.type !== "tabela" || !bloco.tabela) {
+      resultado.push(bloco);
+      continue;
+    }
+
+    const anterior = resultado[resultado.length - 1];
+    if (anterior && anterior.type === "paragraph") {
+      const m = anterior.text.match(REGEX_TITULO_TABELA);
+      if (m) {
+        bloco.tabela.titulo = m[2].trim();
+        bloco.tabela.tipo = m[1].toLowerCase() === "quadro" ? "quadro" : "tabela";
+        resultado.pop();
+      }
+    }
+
+    const proximo = blocks[i + 1];
+    if (proximo && proximo.type === "paragraph") {
+      const m = proximo.text.match(REGEX_FONTE);
+      if (m) {
+        bloco.tabela.fonte = m[1].trim();
+        i += 1;
+      }
+    }
+
+    resultado.push(bloco);
+  }
+
+  return resultado;
+}
+
+// ---------- Função principal ----------
+
 export async function parseDocx(file: File): Promise<DocBlock[]> {
   const zip = await JSZip.loadAsync(file);
 
@@ -161,15 +266,34 @@ export async function parseDocx(file: File): Promise<DocBlock[]> {
 
   const parser = new XMLParser(parserOptions);
   const parsed = parser.parse(documentXml);
+  const body = parsed?.["w:document"]?.["w:body"];
 
-  const paragraphs = parsed?.["w:document"]?.["w:body"]?.["w:p"];
+  const paragraphs = body?.["w:p"];
   const paragraphArray: any[] = Array.isArray(paragraphs) ? paragraphs : paragraphs ? [paragraphs] : [];
+  const tables = body?.["w:tbl"];
+  const tableArray: any[] = Array.isArray(tables) ? tables : tables ? [tables] : [];
+
+  const ordem = ordemDoCorpo(documentXml);
+  const sequencia: ("p" | "tbl")[] = ordem.length > 0 ? ordem : paragraphArray.map(() => "p" as const);
 
   const blocks: DocBlock[] = [];
   let insideReferencias = false;
   let contadorFiguraOriginal = 0;
+  let iP = 0;
+  let iT = 0;
 
-  for (const p of paragraphArray) {
+  for (const item of sequencia) {
+    if (item === "tbl") {
+      const dados = tableArray[iT] ? extractTabela(tableArray[iT]) : null;
+      iT += 1;
+      if (dados) blocks.push({ type: "tabela", text: "", tabela: dados });
+      continue;
+    }
+
+    const p = paragraphArray[iP];
+    iP += 1;
+    if (!p) continue;
+
     const runsBrutos = p["w:r"];
     const runArray = Array.isArray(runsBrutos) ? runsBrutos : runsBrutos ? [runsBrutos] : [];
 
@@ -213,5 +337,5 @@ export async function parseDocx(file: File): Promise<DocBlock[]> {
     blocks.push({ type, text, runs: runsDoParagrafo });
   }
 
-  return blocks;
+  return associarLegendas(blocks);
 }

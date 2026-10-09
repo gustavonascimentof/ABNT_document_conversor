@@ -6,12 +6,25 @@ export type BlockType =
   | "citacaoLonga"
   | "referencia"
   | "imagemExemplo"
-  | "imagem";
+  | "imagem"
+  | "tabela";
 
 export interface TextRunData {
   text: string;
   bold?: boolean;
   italic?: boolean;
+}
+
+export interface CelulaTabela {
+  text: string;
+  colSpan?: number;
+}
+
+export interface DadosTabela {
+  linhas: CelulaTabela[][];
+  tipo: "tabela" | "quadro";
+  titulo?: string;
+  fonte?: string;
 }
 
 export interface DocBlock {
@@ -24,6 +37,7 @@ export interface DocBlock {
     height: number;
     tipo: "png" | "jpg" | "gif" | "bmp";
   };
+  tabela?: DadosTabela;
 }
 
 export interface DocumentMetadata {
