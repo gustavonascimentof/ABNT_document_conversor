@@ -181,6 +181,20 @@ function buildImagemExemplo(numero: number, legenda: string): Paragraph[] {
   ];
 }
 
+function buildImagemDoOriginal(imagem: NonNullable<DocBlock["imagem"]>): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 240, after: 240 },
+    children: [
+      new ImageRun({
+        type: imagem.tipo,
+        data: imagem.data,
+        transformation: { width: imagem.width, height: imagem.height },
+      }),
+    ],
+  });
+}
+
 // ---------- Corpo do documento ----------
 
 function blockParaParagrafo(block: DocBlock): Paragraph {
@@ -226,11 +240,18 @@ function blockParaParagrafo(block: DocBlock): Paragraph {
     });
   }
 
+    const runsRenderizados =
+    block.runs && block.runs.length > 0
+      ? block.runs.map(
+          (r) => new TextRun({ text: r.text, size: ABNT_RULES.font.sizeBodyHalfPt, bold: r.bold, italics: r.italic })
+        )
+      : [new TextRun({ text, size: ABNT_RULES.font.sizeBodyHalfPt })];
+
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
     indent: { firstLine: ABNT_RULES.indent.firstLineTwip },
     spacing: { line: ABNT_RULES.spacing.bodyLine, lineRule: "auto" },
-    children: [new TextRun({ text, size: ABNT_RULES.font.sizeBodyHalfPt })],
+    children: runsRenderizados,
   });
 }
 
@@ -243,6 +264,8 @@ export async function generateAbntDocx(blocks: DocBlock[], meta: DocumentMetadat
     if (block.type === "imagemExemplo") {
       contadorFigura += 1;
       corpo.push(...buildImagemExemplo(contadorFigura, block.text));
+    } else if (block.type === "imagem" && block.imagem) {
+      corpo.push(buildImagemDoOriginal(block.imagem));
     } else {
       corpo.push(blockParaParagrafo(block));
     }

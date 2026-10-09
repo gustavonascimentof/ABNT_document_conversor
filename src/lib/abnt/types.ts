@@ -5,11 +5,25 @@ export type BlockType =
   | "paragraph"
   | "citacaoLonga"
   | "referencia"
-  | "imagemExemplo";
+  | "imagemExemplo"
+  | "imagem";
+
+export interface TextRunData {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+}
 
 export interface DocBlock {
   type: BlockType;
   text: string;
+  runs?: TextRunData[];
+  imagem?: {
+    data: Uint8Array;
+    width: number;
+    height: number;
+    tipo: "png" | "jpg" | "gif" | "bmp";
+  };
 }
 
 export interface DocumentMetadata {
@@ -20,5 +34,5 @@ export interface DocumentMetadata {
   cidade: string;
   ano: string;
   orientador?: string;
-  natureza?: string; // ex: "Trabalho apresentado à disciplina X como requisito..."
+  natureza?: string;
 }
